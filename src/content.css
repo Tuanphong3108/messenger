@@ -1,0 +1,41 @@
+/*
+ * Reskin cho facebook.com/messages khi bị nhúng trong Messenger Panel.
+ * Mọi selector đều nằm trong html[data-mbx] nên tab Facebook bình thường KHÔNG bị ảnh hưởng.
+ * Facebook hay đổi DOM; nếu UI trong khung bị vỡ, tắt "Giao diện gọn" trong Cài đặt,
+ * hoặc sửa file này rồi chạy `npm run build`.
+ */
+
+/* Bỏ thanh trên cùng của Facebook (panel đã có app bar riêng) */
+html[data-mbx] {
+  --header-height: 0px !important;
+  overscroll-behavior: none;
+}
+html[data-mbx] [role="banner"] {
+  display: none !important;
+}
+html[data-mbx] body {
+  margin: 0;
+}
+
+/* Thanh cuộn mảnh cho vừa panel hẹp */
+html[data-mbx] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+html[data-mbx] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html[data-mbx] ::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.45);
+  border-radius: 3px;
+}
+
+/* Hiệu ứng nháy ô tìm kiếm khi bấm nút tìm kiếm ở app bar */
+@keyframes mbx-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(91, 108, 240, 0.65); }
+  100% { box-shadow: 0 0 0 10px rgba(91, 108, 240, 0); }
+}
+html[data-mbx] .mbx-flash {
+  animation: mbx-flash 0.7s ease-out 1;
+  border-radius: 24px;
+}

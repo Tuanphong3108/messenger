@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Messenger</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main id="app">
+
+    <!-- HOME: danh sách đoạn chat + dock -->
+    <section class="page" data-page="home">
+      <header class="appbar">
+        <h1 class="title-large" data-i18n="home"></h1>
+        <span class="spacer"></span>
+        <md-filled-tonal-icon-button id="btn-search" data-i18n-attr="search">
+          <md-icon>search</md-icon>
+        </md-filled-tonal-icon-button>
+      </header>
+
+      <div class="frame-wrap">
+        <iframe id="frame-list" name="mbx-list" title="Messenger"
+                allow="clipboard-write; autoplay; fullscreen"></iframe>
+        <div class="loader" data-for="list"><md-circular-progress indeterminate></md-circular-progress></div>
+        <div class="snack" id="snack" hidden>
+          <span data-i18n="snack"></span>
+          <md-text-button id="snack-open"><span data-i18n="openTab"></span></md-text-button>
+        </div>
+      </div>
+
+      <nav class="dock" data-i18n-attr="menu">
+        <button class="dock-item" data-act="account">
+          <span class="dock-ind">
+            <md-ripple></md-ripple>
+            <span class="avatar">
+              <img class="js-avatar" alt="" hidden>
+              <md-icon class="js-avatar-fallback">person</md-icon>
+            </span>
+          </span>
+          <span class="dock-label" data-i18n="account"></span>
+        </button>
+        <button class="dock-item" data-act="new">
+          <span class="dock-ind"><md-ripple></md-ripple><md-icon>edit_square</md-icon></span>
+          <span class="dock-label" data-i18n="compose"></span>
+        </button>
+        <button class="dock-item" data-act="requests">
+          <span class="dock-ind"><md-ripple></md-ripple><md-icon>inbox</md-icon></span>
+          <span class="dock-label" data-i18n="requests"></span>
+        </button>
+        <button class="dock-item" data-act="archived">
+          <span class="dock-ind"><md-ripple></md-ripple><md-icon>archive</md-icon></span>
+          <span class="dock-label" data-i18n="archived"></span>
+        </button>
+        <button class="dock-item" data-act="settings">
+          <span class="dock-ind"><md-ripple></md-ripple><md-icon>settings</md-icon></span>
+          <span class="dock-label" data-i18n="settings"></span>
+        </button>
+      </nav>
+    </section>
+
+    <!-- CHAT: một đoạn chat -->
+    <section class="page" data-page="chat">
+      <header class="appbar">
+        <md-icon-button class="js-back" data-i18n-attr="back"><md-icon>arrow_back</md-icon></md-icon-button>
+        <h2 class="title-medium" id="chat-title"></h2>
+        <span class="spacer"></span>
+        <md-icon-button id="chat-open-tab" data-i18n-attr="openTab"><md-icon>open_in_new</md-icon></md-icon-button>
+      </header>
+      <div class="frame-wrap">
+        <iframe id="frame-chat" name="mbx-chat" title="Chat"
+                allow="clipboard-write; autoplay; fullscreen"></iframe>
+        <div class="loader" data-for="chat"><md-circular-progress indeterminate></md-circular-progress></div>
+      </div>
+    </section>
+
+    <!-- FN: trang chức năng dựa trên Facebook (tin nhắn mới / tin chờ / lưu trữ) -->
+    <section class="page" data-page="fn">
+      <header class="appbar">
+        <md-icon-button class="js-back" data-i18n-attr="back"><md-icon>arrow_back</md-icon></md-icon-button>
+        <h2 class="title-medium" id="fn-title"></h2>
+      </header>
+      <div class="frame-wrap">
+        <iframe id="frame-fn" name="mbx-fn" title="Messenger"
+                allow="clipboard-write; autoplay; fullscreen"></iframe>
+        <div class="loader" data-for="fn"><md-circular-progress indeterminate></md-circular-progress></div>
+      </div>
+    </section>
+
+    <!-- ACCOUNT -->
+    <section class="page" data-page="account">
+      <header class="appbar">
+        <md-icon-button class="js-back" data-i18n-attr="back"><md-icon>arrow_back</md-icon></md-icon-button>
+        <h2 class="title-medium" data-i18n="account"></h2>
+      </header>
+      <div class="scroll center">
+        <div class="avatar avatar-xl">
+          <img class="js-avatar" alt="" hidden>
+          <md-icon class="js-avatar-fallback">person</md-icon>
+        </div>
+        <p class="headline" data-i18n="fbAccount"></p>
+        <div class="stack">
+          <md-filled-tonal-button id="acc-profile"><md-icon slot="icon">account_circle</md-icon><span data-i18n="openProfile"></span></md-filled-tonal-button>
+          <md-filled-tonal-button id="acc-tab"><md-icon slot="icon">open_in_new</md-icon><span data-i18n="openTab"></span></md-filled-tonal-button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" data-page="settings">
+      <header class="appbar">
+        <md-icon-button class="js-back" data-i18n-attr="back"><md-icon>arrow_back</md-icon></md-icon-button>
+        <h2 class="title-medium" data-i18n="settings"></h2>
+      </header>
+      <div class="scroll">
+        <md-list>
+          <md-list-item type="button" id="row-popup">
+            <md-icon slot="start">picture_in_picture</md-icon>
+            <div slot="headline" data-i18n="popupMode"></div>
+            <div slot="supporting-text" data-i18n="popupDesc"></div>
+            <md-switch slot="end" id="sw-popup" data-i18n-attr="popupMode"></md-switch>
+          </md-list-item>
+          <md-list-item type="button" id="row-compact">
+            <md-icon slot="start">tune</md-icon>
+            <div slot="headline" data-i18n="compact"></div>
+            <div slot="supporting-text" data-i18n="compactDesc"></div>
+            <md-switch slot="end" id="sw-compact" data-i18n-attr="compact"></md-switch>
+          </md-list-item>
+          <md-list-item type="button" id="row-reload">
+            <md-icon slot="start">refresh</md-icon>
+            <div slot="headline" data-i18n="reload"></div>
+          </md-list-item>
+          <md-list-item type="button" id="row-tab">
+            <md-icon slot="start">open_in_new</md-icon>
+            <div slot="headline" data-i18n="openTab"></div>
+          </md-list-item>
+        </md-list>
+        <p class="note" id="status"></p>
+        <p class="note" id="about"></p>
+      </div>
+    </section>
+
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
