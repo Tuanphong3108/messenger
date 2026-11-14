@@ -98,6 +98,7 @@ addEventListener('mouseup', (e) => {
 const frames = { list: $('#frame-list'), chat: $('#frame-chat'), fn: $('#frame-fn') };
 const loaders = Object.fromEntries($$('.loader').map((l) => [l.dataset.for, l]));
 const loadTimers = {};
+const waits = {}; // name -> loại message cần đợi trước khi tắt loader
 const connected = new Set();
 
 function setLoading(name, on) {
@@ -105,19 +106,31 @@ function setLoading(name, on) {
   clearTimeout(loadTimers[name]);
   if (on) loadTimers[name] = setTimeout(() => setLoading(name, false), 15000);
 }
-function load(name, url) {
+function load(name, url, waitFor = null) {
+  waits[name] = waitFor;
   setLoading(name, true);
   frames[name].src = url;
+}
+function gotMsg(name, type) {
+  if (waits[name] && waits[name] === type) {
+    waits[name] = null;
+    setLoading(name, false);
+  }
 }
 function unload(name) {
   frames[name].src = 'about:blank';
   frames[name].dataset.key = '';
+  waits[name] = null;
+  if (name === 'chat') {
+    frames.chat.style.removeProperty('--chat-l');
+    frames.chat.style.removeProperty('--chat-w');
+  }
   connected.delete(name);
   renderStatus();
 }
 for (const [name, f] of Object.entries(frames)) {
   f.addEventListener('load', () => {
-    if (f.getAttribute('src') && f.getAttribute('src') !== 'about:blank') setLoading(name, false);
+    if (f.getAttribute('src') && f.getAttribute('src') !== 'about:blank' && !waits[name]) setLoading(name, false);
   });
 }
 function post(name, msg) {
@@ -140,15 +153,17 @@ $('#snack-open').addEventListener('click', () => openTab('/messages/'));
 const FN = {
   new: { path: '/messages/new', title: 'newTitle' },
   requests: { path: '/messages/requests', title: 'requestsTitle' },
-  archived: { path: '/messages/archived', title: 'archivedTitle' },
+  // Facebook không còn URL trực tiếp cho Lưu trữ: mở danh sách rồi content script tự bấm menu ⋯ > Archived chats
+  archived: { path: '/messages/', title: 'archivedTitle', action: 'open-archived' },
 };
+let fnAction = null;
 let chatPath = '/messages/';
 
 function openChat(path, name) {
   if (stack.includes('chat')) return;
   chatPath = path;
   $('#chat-title').textContent = name || t('home');
-  load('chat', FB + path);
+  load('chat', FB + path, 'pane');
   push('chat');
 }
 function openFn(key) {
@@ -156,13 +171,19 @@ function openFn(key) {
   $('#fn-title').textContent = t(def.title);
   if (frames.fn.dataset.key !== key) {
     frames.fn.dataset.key = key;
-    load('fn', FB + def.path);
+    fnAction = def.action || null;
+    load('fn', FB + def.path, def.action ? 'action-done' : null);
   }
   push('fn');
 }
 function openTab(path) {
   chrome.tabs.create({ url: FB + path });
 }
+
+// Báo bề rộng panel cho khung chat (để content script cắt cột danh sách cho vừa khít)
+const chatWrap = frames.chat.parentElement;
+const sendViewport = () => post('chat', { t: 'viewport', w: Math.round(chatWrap.clientWidth) });
+new ResizeObserver(sendViewport).observe(chatWrap);
 
 $('#chat-open-tab').addEventListener('click', () => openTab(chatPath));
 $('#acc-profile').addEventListener('click', () => openTab('/me'));
@@ -192,7 +213,20 @@ addEventListener('message', (e) => {
     case 'hello':
       connected.add(name);
       if (name === 'list') snack.hidden = true;
+      if (name === 'chat') sendViewport();
+      if (name === 'fn' && fnAction) {
+        post('fn', { t: 'action', name: fnAction });
+        fnAction = null;
+      }
       renderStatus();
+      break;
+    case 'pane':
+      if (name === 'chat') {
+        const l = Math.max(0, Math.min(900, Math.round(Number(d.left)) || 0));
+        frames.chat.style.setProperty('--chat-l', l + 'px');
+        frames.chat.style.setProperty('--chat-w', `max(1000px, calc(100% + ${l + 20}px))`);
+        sendViewport();
+      }
       break;
     case 'thread':
       if (name !== 'chat' && typeof d.path === 'string' && THREAD_RE.test(d.path)) {
@@ -206,6 +240,7 @@ addEventListener('message', (e) => {
       if (typeof d.avatar === 'string' && AVATAR_RE.test(d.avatar)) setAvatar(d.avatar);
       break;
   }
+  gotMsg(name, d.t);
 });
 
 // ---------------------------------------------------------------- Avatar

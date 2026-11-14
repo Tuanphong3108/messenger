@@ -133,6 +133,12 @@ md-icon { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
   border: 0;
   background: transparent;
 }
+/* Khung chat: viewport rộng (>= 1000px) để Facebook hiện cột hội thoại, dịch trái đúng bằng cột danh sách */
+#frame-chat {
+  right: auto;
+  left: calc(-1 * var(--chat-l, 0px));
+  width: var(--chat-w, max(1000px, 100%));
+}
 .loader {
   position: absolute;
   inset: 0;

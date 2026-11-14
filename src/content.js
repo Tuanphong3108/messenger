@@ -1,7 +1,8 @@
 // Content script chạy trong khung facebook.com/messages được nhúng bởi chính extension này.
 // - Bơm CSS reskin (nếu bật "Giao diện gọn")
 // - Chặn click vào đoạn chat để shell trượt sang trang chat
-// - Nhận lệnh từ shell (focus ô tìm kiếm) và gửi avatar về dock
+// - Khung chat: render ở bề ngang rộng rồi cắt bỏ cột danh sách (Facebook ở bề ngang hẹp chỉ hiện danh sách)
+// - Khung chức năng: ẩn nút back của Facebook, tự mở "Archived chats" từ menu
 import css from './content.css';
 
 (() => {
@@ -13,6 +14,8 @@ import css from './content.css';
 
   const role = (window.name || '').startsWith('mbx-') ? window.name.slice(4) : 'fn';
   const post = (msg) => parent.postMessage({ __mbx: 1, role, ...msg }, extOrigin);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const THREAD_LINK = 'a[href*="/messages/t/"], a[href*="/messages/e2ee/t/"]';
 
   // ---------- CSS reskin ----------
   const STYLE_ID = 'mbx-style';
@@ -72,8 +75,69 @@ import css from './content.css';
     );
   }
 
-  // ---------- Khung chat: nếu Facebook tự quay về danh sách thì báo shell "back" ----------
+  // ---------- Khung chat ----------
+  // Ở bề ngang hẹp Facebook chỉ hiện DANH SÁCH. Shell cho khung này viewport rộng (>= 1000px) và dịch sang trái
+  // đúng bằng bề rộng cột danh sách; ở đây ta đo bề rộng đó rồi ép html rộng = (cột danh sách + bề rộng panel)
+  // để cột hội thoại vừa khít panel.
   if (role === 'chat') {
+    const paneStyle = document.createElement('style');
+    paneStyle.textContent =
+      'html[data-mbx-pane]{width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw))!important;overflow:hidden!important}' +
+      'html[data-mbx-pane] body{width:100%!important;min-width:0!important;overflow:hidden!important}';
+    (document.head || document.documentElement).appendChild(paneStyle);
+
+    let paneL = null;
+    let panelW = 0;
+
+    const applyPane = () => {
+      const root = document.documentElement;
+      if (panelW) root.style.setProperty('--mbx-w', panelW + 'px');
+      if (paneL != null) {
+        root.style.setProperty('--mbx-l', paneL + 'px');
+        root.setAttribute('data-mbx-pane', '1');
+      }
+    };
+
+    // Vị trí mép trái của cột hội thoại
+    function measurePaneLeft() {
+      const main = document.querySelector('[role="main"]');
+      if (main) {
+        const r = main.getBoundingClientRect();
+        if (r.width > 150 && r.left >= 100) return r.left;
+      }
+      const box = document.querySelector('[role="textbox"][contenteditable="true"]');
+      if (box) {
+        let el = box;
+        while (el.parentElement && el.parentElement !== document.body && !el.parentElement.querySelector(THREAD_LINK)) {
+          el = el.parentElement;
+        }
+        const r = el.getBoundingClientRect();
+        if (r.width > 150 && r.left >= 100) return r.left;
+      }
+      return null;
+    }
+
+    setInterval(() => {
+      const l = measurePaneLeft();
+      if (l == null) return;
+      const r = Math.round(l);
+      if (paneL == null || Math.abs(r - paneL) > 3) {
+        paneL = r;
+        applyPane();
+        post({ t: 'pane', left: r });
+      }
+    }, 500);
+
+    window.addEventListener('message', (e) => {
+      if (e.origin !== extOrigin || e.source !== parent) return;
+      const d = e.data;
+      if (d && d.__mbx === 1 && d.t === 'viewport' && Number.isFinite(d.w)) {
+        panelW = Math.max(200, Math.round(d.w));
+        applyPane();
+      }
+    });
+
+    // Nếu Facebook tự quay về danh sách thì báo shell "back"
     const isThread = () => /^\/messages\/(e2ee\/)?t\//.test(location.pathname);
     let was = isThread();
     setInterval(() => {
@@ -81,6 +145,68 @@ import css from './content.css';
       if (was && !now) post({ t: 'back' });
       was = now;
     }, 400);
+  }
+
+  // ---------- Khung chức năng: ẩn nút back của Facebook ----------
+  if (role === 'fn') {
+    const hideBack = () => {
+      for (const el of document.querySelectorAll('a, [role="button"]')) {
+        if (el.dataset.mbxBack) continue;
+        const r = el.getBoundingClientRect();
+        if (!r.width || r.top > 100 || r.left > 100 || r.width > 64 || r.height > 64) continue;
+        if (el.querySelector('img') || (el.textContent || '').trim() || !el.querySelector('svg, i')) continue;
+        el.dataset.mbxBack = '1';
+        el.style.setProperty('display', 'none', 'important');
+      }
+    };
+    let pending = false;
+    new MutationObserver(() => {
+      if (pending) return;
+      pending = true;
+      setTimeout(() => {
+        pending = false;
+        hideBack();
+      }, 250);
+    }).observe(document, { childList: true, subtree: true });
+  }
+
+  // ---------- Tự mở "Archived chats" từ menu ⋯ của danh sách ----------
+  const ARCHIVED_RE = /archiv|lưu trữ/i;
+  const HEADING_RE = /^(chats|đoạn chat)$/i;
+
+  function findMenuTrigger() {
+    const h = Array.from(document.querySelectorAll('h1, h2, [role="heading"]')).find((n) =>
+      HEADING_RE.test((n.textContent || '').trim())
+    );
+    if (!h) return null;
+    let box = h.parentElement;
+    for (let i = 0; i < 5 && box; i++, box = box.parentElement) {
+      const btns = Array.from(box.querySelectorAll('[role="button"][aria-label]')).filter((b) => !b.contains(h));
+      if (btns.length >= 2) return btns[0]; // ⋯ đứng trước nút soạn tin
+    }
+    return null;
+  }
+
+  async function openArchived() {
+    const deadline = Date.now() + 20000;
+    let lastClick = 0;
+    while (Date.now() < deadline) {
+      const item = Array.from(
+        document.querySelectorAll('[role="menuitem"], [role="menu"] [role="button"], [role="menu"] a')
+      ).find((n) => ARCHIVED_RE.test(n.textContent || ''));
+      if (item) {
+        item.click();
+        await sleep(600);
+        return true;
+      }
+      const trigger = findMenuTrigger();
+      if (trigger && Date.now() - lastClick > 1500) {
+        lastClick = Date.now();
+        trigger.click();
+      }
+      await sleep(400);
+    }
+    return false;
   }
 
   // ---------- Lệnh từ shell ----------
@@ -106,6 +232,9 @@ import css from './content.css';
     const d = e.data;
     if (!d || d.__mbx !== 1) return;
     if (d.t === 'focus-search') focusSearch();
+    if (d.t === 'action' && d.name === 'open-archived') {
+      openArchived().finally(() => post({ t: 'action-done' }));
+    }
   });
 
   // ---------- Avatar tài khoản (cho dock) ----------
