@@ -227,6 +227,11 @@ addEventListener('message', (e) => {
     case 'pane':
       if (name === 'chat') sendViewport();
       break;
+    case 'title':
+      if (name === 'chat' && typeof d.title === 'string' && d.title.trim()) {
+        $('#chat-title').textContent = d.title.trim().slice(0, 80);
+      }
+      break;
     case 'thread':
       if (name !== 'chat' && typeof d.path === 'string' && THREAD_RE.test(d.path)) {
         openChat(d.path, String(d.name || '').slice(0, 80));

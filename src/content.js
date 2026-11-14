@@ -44,11 +44,14 @@ import css from './content.css';
   // ---------- Click vào đoạn chat -> báo shell ----------
   const THREAD_RE = /^\/messages\/(e2ee\/)?t\/[A-Za-z0-9._-]+\/?$/;
 
+  // Dòng trạng thái / thời gian / "Bạn: ..." không phải tên cuộc trò chuyện
+  const STATUS_RE = /^(active|đang hoạt động|hoạt động|online|offline|typing|đang nhập|you:|bạn:|·|\d+\s?[smhdwy]$)/i;
+
   function rowName(a) {
     const row = a.closest('[role="row"], [role="listitem"], li') || a;
     for (const s of row.querySelectorAll('span')) {
       const t = s.textContent.trim();
-      if (t && t.length < 80) return t;
+      if (t && t.length < 80 && !STATUS_RE.test(t)) return t;
     }
     return (a.getAttribute('aria-label') || '').trim();
   }
@@ -86,8 +89,12 @@ import css from './content.css';
       'html[data-mbx-pane]{width:var(--mbx-w,100vw)!important;height:100%!important;overflow:hidden!important}' +
       'html[data-mbx-pane] body{position:relative!important;width:var(--mbx-w,100vw)!important;height:100vh!important;' +
       'margin:0!important;overflow:hidden!important;transform:translateZ(0)!important}' +
+      // app root: dịch trái đúng bằng cột danh sách; chừa thêm 520px bên phải để bảng thông tin (nút "i") nằm NGOÀI vùng nhìn
       'html[data-mbx-pane] [data-mbx-root]{position:relative!important;left:calc(-1 * var(--mbx-l,0px))!important;' +
-      'width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw))!important;min-width:0!important;max-width:none!important}';
+      'width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw) + 520px)!important;min-width:0!important;max-width:none!important;overflow:hidden!important}' +
+      // cột hội thoại cố định bằng bề rộng panel (trừ lề hai bên) -> không bị bảng thông tin ép hẹp
+      'html[data-mbx-pane] [data-mbx-main]{flex:0 0 auto!important;width:calc(var(--mbx-w,100vw) - 2 * var(--mbx-gap,0px))!important;' +
+      'min-width:0!important;max-width:none!important}';
     (document.head || document.documentElement).appendChild(paneStyle);
 
     let paneL = null;
@@ -102,37 +109,65 @@ import css from './content.css';
       }
     };
 
-    // Phần tử cột hội thoại (mép trái >= 100px khi viewport rộng)
-    function findColumn() {
+    // Cột hội thoại: role=main (mép trái >= 100px khi viewport rộng), hoặc cột chứa ô soạn tin
+    function findMain() {
       const main = document.querySelector('[role="main"]');
-      if (main) {
-        const r = main.getBoundingClientRect();
-        if (r.width > 150 && r.left >= 100) return main;
-      }
+      if (!main) return null;
+      const r = main.getBoundingClientRect();
+      return r.width > 150 && r.left >= 100 ? main : null;
+    }
+    function findComposerColumn() {
       const box = document.querySelector('[role="textbox"][contenteditable="true"]');
-      if (box) {
-        let el = box;
-        while (el.parentElement && el.parentElement !== document.body && !el.parentElement.querySelector(THREAD_LINK)) {
-          el = el.parentElement;
-        }
-        const r = el.getBoundingClientRect();
-        if (r.width > 150 && r.left >= 100) return el;
+      if (!box) return null;
+      let el = box;
+      while (el.parentElement && el.parentElement !== document.body && !el.parentElement.querySelector(THREAD_LINK)) {
+        el = el.parentElement;
       }
-      return null;
+      const r = el.getBoundingClientRect();
+      return r.width > 150 && r.left >= 100 ? el : null;
     }
 
     // Đo MỘT lần khi cột hội thoại xuất hiện
     const measure = setInterval(() => {
-      const col = findColumn();
+      const main = findMain();
+      const col = main || findComposerColumn();
       if (!col) return;
       clearInterval(measure);
+
+      // cột lớn nhất không chứa danh sách (gồm cả lề/khung thẻ bao quanh hội thoại)
+      let top = col;
+      while (top.parentElement && top.parentElement !== document.body && !top.parentElement.querySelector(THREAD_LINK)) {
+        top = top.parentElement;
+      }
+      // mép trái thật = mép trái nhỏ nhất của các khối lớn trong cột (tránh cắt mất lề/khung bo góc)
+      const baseLeft = col.getBoundingClientRect().left;
+      let left = baseLeft;
+      for (const el of [top, ...top.querySelectorAll('*')]) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 60 && r.height > 60 && r.left < left && r.left >= baseLeft - 60) left = r.left;
+      }
+      paneL = Math.round(left);
       let root = col;
       while (root.parentElement && root.parentElement !== document.body) root = root.parentElement;
       root.setAttribute('data-mbx-root', '1');
-      paneL = Math.round(col.getBoundingClientRect().left);
+      document.documentElement.style.setProperty('--mbx-gap', Math.max(0, Math.round(baseLeft - left)) + 'px');
+      if (main) main.setAttribute('data-mbx-main', '1');
       applyPane();
       post({ t: 'pane', left: paneL });
     }, 400);
+
+    // Tên cuộc trò chuyện từ header hội thoại (shell dùng làm tiêu đề)
+    let lastTitle = '';
+    setInterval(() => {
+      const h = document.querySelector(
+        '[role="main"] h1, [role="main"] h2, [role="main"] [role="heading"], [data-mbx-main] h1, [data-mbx-main] h2'
+      );
+      const t = ((h && h.textContent) || '').trim();
+      if (t && t !== lastTitle && t.length < 80 && !STATUS_RE.test(t)) {
+        lastTitle = t;
+        post({ t: 'title', title: t });
+      }
+    }, 1000);
 
     window.addEventListener('message', (e) => {
       if (e.origin !== extOrigin || e.source !== parent) return;
