@@ -89,12 +89,13 @@ import css from './content.css';
       'html[data-mbx-pane]{width:var(--mbx-w,100vw)!important;height:100%!important;overflow:hidden!important}' +
       'html[data-mbx-pane] body{position:relative!important;width:var(--mbx-w,100vw)!important;height:100vh!important;' +
       'margin:0!important;overflow:hidden!important;transform:translateZ(0)!important}' +
-      // app root: dịch trái đúng bằng cột danh sách; chừa thêm 520px bên phải để bảng thông tin (nút "i") nằm NGOÀI vùng nhìn
+      // app root: dịch trái đúng bằng cột danh sách, rộng = cột danh sách + panel -> thẻ hội thoại tự co vừa panel
       'html[data-mbx-pane] [data-mbx-root]{position:relative!important;left:calc(-1 * var(--mbx-l,0px))!important;' +
-      'width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw) + 520px)!important;min-width:0!important;max-width:none!important;overflow:hidden!important}' +
-      // cột hội thoại cố định bằng bề rộng panel (trừ lề hai bên) -> không bị bảng thông tin ép hẹp
-      'html[data-mbx-pane] [data-mbx-main]{flex:0 0 auto!important;width:calc(var(--mbx-w,100vw) - 2 * var(--mbx-gap,0px))!important;' +
-      'min-width:0!important;max-width:none!important}';
+      'width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw))!important;min-width:0!important;max-width:none!important;overflow:hidden!important}' +
+      // Nút "i" mở bảng thông tin sẽ ép hẹp cột hội thoại (không đủ chỗ trong panel) -> ẩn; dùng nút mở tab của panel
+      'html[data-mbx-pane] [role="button"][aria-label*="onversation information" i],' +
+      'html[data-mbx-pane] [role="button"][aria-label*="hat information" i],' +
+      'html[data-mbx-pane] [role="button"][aria-label*="hông tin" i]{display:none!important}';
     (document.head || document.documentElement).appendChild(paneStyle);
 
     let paneL = null;
@@ -150,8 +151,6 @@ import css from './content.css';
       let root = col;
       while (root.parentElement && root.parentElement !== document.body) root = root.parentElement;
       root.setAttribute('data-mbx-root', '1');
-      document.documentElement.style.setProperty('--mbx-gap', Math.max(0, Math.round(baseLeft - left)) + 'px');
-      if (main) main.setAttribute('data-mbx-main', '1');
       applyPane();
       post({ t: 'pane', left: paneL });
     }, 400);
@@ -160,7 +159,7 @@ import css from './content.css';
     let lastTitle = '';
     setInterval(() => {
       const h = document.querySelector(
-        '[role="main"] h1, [role="main"] h2, [role="main"] [role="heading"], [data-mbx-main] h1, [data-mbx-main] h2'
+        '[role="main"] h1, [role="main"] h2, [role="main"] [role="heading"]'
       );
       const t = ((h && h.textContent) || '').trim();
       if (t && t !== lastTitle && t.length < 80 && !STATUS_RE.test(t)) {
