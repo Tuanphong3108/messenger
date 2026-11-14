@@ -100,6 +100,7 @@ const loaders = Object.fromEntries($$('.loader').map((l) => [l.dataset.for, l]))
 const loadTimers = {};
 const waits = {}; // name -> loại message cần đợi trước khi tắt loader
 const connected = new Set();
+let diagText = '';
 
 function setLoading(name, on) {
   loaders[name].dataset.on = on ? '1' : '0';
@@ -227,6 +228,12 @@ addEventListener('message', (e) => {
     case 'pane':
       if (name === 'chat') sendViewport();
       break;
+    case 'diag':
+      if (name === 'chat' && d.info && typeof d.info === 'object') {
+        diagText = JSON.stringify(d.info).slice(0, 500);
+        renderStatus();
+      }
+      break;
     case 'title':
       if (name === 'chat' && typeof d.title === 'string' && d.title.trim()) {
         $('#chat-title').textContent = d.title.trim().slice(0, 80);
@@ -276,6 +283,7 @@ async function renderStatus() {
   } catch {
     /* storage.session không có -> bỏ qua */
   }
+  if (diagText) text += ` · chat ${diagText}`;
   $('#status').textContent = text;
 }
 async function initSettings() {

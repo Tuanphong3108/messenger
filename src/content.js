@@ -100,6 +100,9 @@ import css from './content.css';
 
     let paneL = null;
     let panelW = 0;
+    let top = null; // cột hội thoại (cột lớn nhất không chứa danh sách)
+    let frozenInfo = [];
+    let adjustCount = 0;
 
     const applyPane = () => {
       const root = document.documentElement;
@@ -128,32 +131,87 @@ import css from './content.css';
       return r.width > 150 && r.left >= 100 ? el : null;
     }
 
-    // Đo MỘT lần khi cột hội thoại xuất hiện
-    const measure = setInterval(() => {
-      const main = findMain();
-      const col = main || findComposerColumn();
-      if (!col) return;
-      clearInterval(measure);
+    // top = cột lớn nhất không chứa danh sách; root = app root (con trực tiếp của body)
+    function locate() {
+      const col = findMain() || findComposerColumn();
+      if (!col) return null;
+      let t = col;
+      while (t.parentElement && t.parentElement !== document.body && !t.parentElement.querySelector(THREAD_LINK)) {
+        t = t.parentElement;
+      }
+      let r = col;
+      while (r.parentElement && r.parentElement !== document.body) r = r.parentElement;
+      return { top: t, root: r };
+    }
 
-      // cột lớn nhất không chứa danh sách (gồm cả lề/khung thẻ bao quanh hội thoại)
-      let top = col;
-      while (top.parentElement && top.parentElement !== document.body && !top.parentElement.querySelector(THREAD_LINK)) {
-        top = top.parentElement;
+    // Ghim bề rộng mọi cột nằm bên trái cột hội thoại (rail + danh sách) để chúng KHÔNG co lại khi ta thu hẹp trang
+    function freezeLeftColumns(from, root) {
+      const widths = [];
+      for (let el = from; el && el !== root; el = el.parentElement) {
+        for (let sib = el.previousElementSibling; sib; sib = sib.previousElementSibling) {
+          const w = sib.getBoundingClientRect().width;
+          if (w <= 0) continue;
+          sib.style.setProperty('flex', 'none', 'important');
+          sib.style.setProperty('width', w + 'px', 'important');
+          sib.style.setProperty('min-width', w + 'px', 'important');
+          sib.style.setProperty('max-width', w + 'px', 'important');
+          widths.push(Math.round(w));
+        }
       }
-      // mép trái thật = mép trái nhỏ nhất của các khối lớn trong cột (tránh cắt mất lề/khung bo góc)
-      const baseLeft = col.getBoundingClientRect().left;
-      let left = baseLeft;
-      for (const el of [top, ...top.querySelectorAll('*')]) {
-        const r = el.getBoundingClientRect();
-        if (r.width > 60 && r.height > 60 && r.left < left && r.left >= baseLeft - 60) left = r.left;
+      return widths;
+    }
+
+    const box = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return [Math.round(r.left), Math.round(r.width)];
+    };
+    // Số đo để chẩn đoán (hiện trong Cài đặt)
+    const diag = (phase, extra = {}) =>
+      post({
+        t: 'diag',
+        info: {
+          phase,
+          L: paneL,
+          panel: panelW,
+          vw: window.innerWidth,
+          top: box(top),
+          main: box(findMain()),
+          composer: box(document.querySelector('[role="textbox"][contenteditable="true"]')),
+          frozen: frozenInfo,
+          adj: adjustCount,
+          ...extra,
+        },
+      });
+
+    setInterval(() => {
+      if (!top || !top.isConnected) {
+        const loc = locate();
+        if (!loc) return;
+        const first = paneL == null;
+        top = loc.top;
+        loc.root.setAttribute('data-mbx-root', '1');
+        if (first) {
+          // Đo MỘT lần lúc bố cục còn nguyên (chưa thu hẹp), ghim cột trái, rồi áp dụng
+          frozenInfo = freezeLeftColumns(top, loc.root);
+          paneL = Math.round(top.getBoundingClientRect().left);
+          applyPane();
+          post({ t: 'pane', left: paneL });
+          setTimeout(() => diag('settled-3s'), 3000);
+          setTimeout(() => diag('settled-8s'), 8000);
+        }
+        return;
       }
-      paneL = Math.round(left);
-      let root = col;
-      while (root.parentElement && root.parentElement !== document.body) root = root.parentElement;
-      root.setAttribute('data-mbx-root', '1');
-      applyPane();
-      post({ t: 'pane', left: paneL });
-    }, 400);
+      // Tự căn chỉnh: mép trái cột hội thoại phải nằm đúng x = 0 của vùng nhìn thấy
+      // (bù mọi sai lệch do danh sách co lại, Facebook bố cục chậm, v.v.)
+      const d = Math.round(top.getBoundingClientRect().left);
+      if (Math.abs(d) >= 2) {
+        paneL = Math.max(0, paneL + d);
+        adjustCount++;
+        applyPane();
+        if (adjustCount <= 20) diag('adjust', { d });
+      }
+    }, 500);
 
     // Tên cuộc trò chuyện từ header hội thoại (shell dùng làm tiêu đề)
     let lastTitle = '';
