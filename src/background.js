@@ -44,30 +44,62 @@ chrome.windows.onRemoved.addListener(async (id) => {
 });
 
 // ---- Cho phép nhúng facebook.com/messages vào khung của extension ----
-// Chỉ áp dụng cho request sub_frame có initiator là extension này.
+// Mọi rule chỉ áp dụng cho request sub_frame có initiator là CHÍNH extension này.
+// Mỗi rule được cài riêng: rule nào bị Chrome từ chối thì chỉ rule đó thất bại.
+const frameCondition = () => ({
+  requestDomains: ['facebook.com'],
+  resourceTypes: ['sub_frame'],
+  initiatorDomains: [chrome.runtime.id],
+});
+
+const FRAME_RULES = [
+  {
+    // 1) Gỡ chặn nhúng iframe
+    id: 1,
+    action: {
+      type: 'modifyHeaders',
+      responseHeaders: [
+        { header: 'x-frame-options', operation: 'remove' },
+        { header: 'content-security-policy', operation: 'remove' },
+        { header: 'content-security-policy-report-only', operation: 'remove' },
+      ],
+    },
+  },
+  {
+    // 2) Referer là chrome-extension://... làm Facebook báo lỗi -> đặt lại thành chính Facebook
+    id: 2,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [{ header: 'referer', operation: 'set', value: 'https://www.facebook.com/' }],
+    },
+  },
+  {
+    // 3) Facebook từ chối request "Sec-Fetch-Dest: iframe" từ site lạ -> làm giống điều hướng trang thường
+    id: 3,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [
+        { header: 'sec-fetch-dest', operation: 'set', value: 'document' },
+        { header: 'sec-fetch-site', operation: 'set', value: 'same-origin' },
+      ],
+    },
+  },
+];
+
 async function installFrameRules() {
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [1],
-    addRules: [
-      {
-        id: 1,
-        priority: 1,
-        action: {
-          type: 'modifyHeaders',
-          responseHeaders: [
-            { header: 'x-frame-options', operation: 'remove' },
-            { header: 'content-security-policy', operation: 'remove' },
-            { header: 'content-security-policy-report-only', operation: 'remove' },
-          ],
-        },
-        condition: {
-          requestDomains: ['facebook.com'],
-          resourceTypes: ['sub_frame'],
-          initiatorDomains: [chrome.runtime.id],
-        },
-      },
-    ],
-  });
+  const errors = [];
+  for (const rule of FRAME_RULES) {
+    try {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [rule.id],
+        addRules: [{ ...rule, priority: 1, condition: frameCondition() }],
+      });
+    } catch (e) {
+      errors.push(`rule ${rule.id}: ${e.message}`);
+      console.warn('[messenger-panel] DNR rule failed', rule.id, e);
+    }
+  }
+  await chrome.storage.session.set({ ruleErrors: errors });
 }
 
 chrome.runtime.onInstalled.addListener(installFrameRules);

@@ -228,9 +228,16 @@ store.get({ avatar: '' }).then((v) => {
 });
 
 // ---------------------------------------------------------------- Cài đặt
-function renderStatus() {
+async function renderStatus() {
   const list = Array.from(connected).join(', ') || t('none');
-  $('#status').textContent = `${t('status')}: ${list}`;
+  let text = `${t('status')}: ${list}`;
+  try {
+    const { ruleErrors } = await chrome.storage.session.get('ruleErrors');
+    if (ruleErrors && ruleErrors.length) text += ` · ⚠ ${ruleErrors.join('; ')}`;
+  } catch {
+    /* storage.session không có -> bỏ qua */
+  }
+  $('#status').textContent = text;
 }
 async function initSettings() {
   const s = await store.get({ forcePopup: false, compact: true });
