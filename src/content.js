@@ -76,14 +76,18 @@ import css from './content.css';
   }
 
   // ---------- Khung chat ----------
-  // Ở bề ngang hẹp Facebook chỉ hiện DANH SÁCH. Shell cho khung này viewport rộng (>= 1000px) và dịch sang trái
-  // đúng bằng bề rộng cột danh sách; ở đây ta đo bề rộng đó rồi ép html rộng = (cột danh sách + bề rộng panel)
-  // để cột hội thoại vừa khít panel.
+  // Ở bề ngang hẹp Facebook chỉ hiện DANH SÁCH. Shell cho khung này viewport rộng (>= 1000px) để Facebook hiện cột
+  // hội thoại. Ở đây ta: (1) khoá body đúng bề rộng panel và cho body `transform` để mọi phần tử position:fixed
+  // (trình xem ảnh, hộp thoại, popup) chỉ phủ vùng panel; (2) dịch "app root" sang trái đúng bằng cột danh sách,
+  // nên cột hội thoại nằm vừa khít panel.
   if (role === 'chat') {
     const paneStyle = document.createElement('style');
     paneStyle.textContent =
-      'html[data-mbx-pane]{width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw))!important;overflow:hidden!important}' +
-      'html[data-mbx-pane] body{width:100%!important;min-width:0!important;overflow:hidden!important}';
+      'html[data-mbx-pane]{width:var(--mbx-w,100vw)!important;height:100%!important;overflow:hidden!important}' +
+      'html[data-mbx-pane] body{position:relative!important;width:var(--mbx-w,100vw)!important;height:100vh!important;' +
+      'margin:0!important;overflow:hidden!important;transform:translateZ(0)!important}' +
+      'html[data-mbx-pane] [data-mbx-root]{position:relative!important;left:calc(-1 * var(--mbx-l,0px))!important;' +
+      'width:calc(var(--mbx-l,0px) + var(--mbx-w,100vw))!important;min-width:0!important;max-width:none!important}';
     (document.head || document.documentElement).appendChild(paneStyle);
 
     let paneL = null;
@@ -98,12 +102,12 @@ import css from './content.css';
       }
     };
 
-    // Vị trí mép trái của cột hội thoại
-    function measurePaneLeft() {
+    // Phần tử cột hội thoại (mép trái >= 100px khi viewport rộng)
+    function findColumn() {
       const main = document.querySelector('[role="main"]');
       if (main) {
         const r = main.getBoundingClientRect();
-        if (r.width > 150 && r.left >= 100) return r.left;
+        if (r.width > 150 && r.left >= 100) return main;
       }
       const box = document.querySelector('[role="textbox"][contenteditable="true"]');
       if (box) {
@@ -112,21 +116,23 @@ import css from './content.css';
           el = el.parentElement;
         }
         const r = el.getBoundingClientRect();
-        if (r.width > 150 && r.left >= 100) return r.left;
+        if (r.width > 150 && r.left >= 100) return el;
       }
       return null;
     }
 
-    setInterval(() => {
-      const l = measurePaneLeft();
-      if (l == null) return;
-      const r = Math.round(l);
-      if (paneL == null || Math.abs(r - paneL) > 3) {
-        paneL = r;
-        applyPane();
-        post({ t: 'pane', left: r });
-      }
-    }, 500);
+    // Đo MỘT lần khi cột hội thoại xuất hiện
+    const measure = setInterval(() => {
+      const col = findColumn();
+      if (!col) return;
+      clearInterval(measure);
+      let root = col;
+      while (root.parentElement && root.parentElement !== document.body) root = root.parentElement;
+      root.setAttribute('data-mbx-root', '1');
+      paneL = Math.round(col.getBoundingClientRect().left);
+      applyPane();
+      post({ t: 'pane', left: paneL });
+    }, 400);
 
     window.addEventListener('message', (e) => {
       if (e.origin !== extOrigin || e.source !== parent) return;

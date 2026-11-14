@@ -121,10 +121,7 @@ function unload(name) {
   frames[name].src = 'about:blank';
   frames[name].dataset.key = '';
   waits[name] = null;
-  if (name === 'chat') {
-    frames.chat.style.removeProperty('--chat-l');
-    frames.chat.style.removeProperty('--chat-w');
-  }
+
   connected.delete(name);
   renderStatus();
 }
@@ -134,7 +131,14 @@ for (const [name, f] of Object.entries(frames)) {
   });
 }
 function post(name, msg) {
-  frames[name].contentWindow?.postMessage({ __mbx: 1, ...msg }, FB);
+  const f = frames[name];
+  // Khung trống/đang tải có origin là chrome-extension:// -> postMessage tới FB sẽ ném lỗi; bỏ qua.
+  if (!(f.getAttribute('src') || '').startsWith(FB)) return;
+  try {
+    f.contentWindow?.postMessage({ __mbx: 1, ...msg }, FB);
+  } catch {
+    /* khung chưa sẵn sàng */
+  }
 }
 
 // Snackbar nếu khung danh sách không "bắt tay" được với content script
@@ -221,12 +225,7 @@ addEventListener('message', (e) => {
       renderStatus();
       break;
     case 'pane':
-      if (name === 'chat') {
-        const l = Math.max(0, Math.min(900, Math.round(Number(d.left)) || 0));
-        frames.chat.style.setProperty('--chat-l', l + 'px');
-        frames.chat.style.setProperty('--chat-w', `max(1000px, calc(100% + ${l + 20}px))`);
-        sendViewport();
-      }
+      if (name === 'chat') sendViewport();
       break;
     case 'thread':
       if (name !== 'chat' && typeof d.path === 'string' && THREAD_RE.test(d.path)) {
